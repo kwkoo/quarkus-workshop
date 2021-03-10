@@ -27,10 +27,10 @@ GIT_ROUTE="http://$(oc get -n $GIT_PROJECT route/$GIT_APP_NAME -o jsonpath='{.sp
 CRW_ROUTE="https://$(oc get -n $CRW_PROJECT route/codeready -o jsonpath='{.spec.host}')"
 CONSOLE_ROUTE="https://$(oc get -n openshift-console route/console -o jsonpath='{.spec.host}')"
 
-ensure_set HR_ROUTE
-ensure_set GIT_ROUTE
-ensure_set CRW_ROUTE
-ensure_set CONSOLE_ROUTE
+#ensure_set HR_ROUTE
+#ensure_set GIT_ROUTE
+#ensure_set CRW_ROUTE
+#ensure_set CONSOLE_ROUTE
 
 set -e
 
@@ -60,6 +60,20 @@ oc new-app \
   -e LAB_ADMIN_PASS="$GAU_ADMIN_PASSWORD" \
   -e LAB_MODULE_URLS="$HR_ROUTE;Lab" \
   -e LAB_EXTRA_URLS="${CONSOLE_ROUTE};OpenShift Console,${CRW_ROUTE};CodeReady Workspaces,${GIT_ROUTE};Gitea"
+
+# Label and annotate for topology view
+oc label \
+  -n $GAU_PROJECT \
+  dc/redis \
+  app.kubernetes.io/part-of='get-a-username'
+oc label \
+  -n $GAU_PROJECT \
+  deploy/get-a-username \
+  app.kubernetes.io/part-of='get-a-username'
+oc annotate \
+  -n $GAU_PROJECT \
+  deploy/get-a-username \
+  app.openshift.io/connects-to='[{"apiVersion":"apps.openshift.io/v1","kind":"DeploymentConfig","name":"redis"}]'
 
 oc expose -n $GAU_PROJECT svc/get-a-username
 oc patch route/get-a-username -n $GAU_PROJECT -p '{"spec":{"tls":{"termination":"edge","insecureEdgeTerminationPolicy":"Allow"}}}'
