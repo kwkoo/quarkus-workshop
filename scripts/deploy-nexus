@@ -1,0 +1,15 @@
+#!/bin/bash
+
+cd `dirname $0`
+BASE=`pwd`
+cd - >> /dev/null
+
+source ${BASE}/../config.sh
+
+oc new-project ${INFRA_PROJECT} || oc project ${INFRA_PROJECT}
+
+oc new-app \
+  -n ${INFRA_PROJECT} \
+  -f https://raw.githubusercontent.com/OpenShiftDemos/nexus/master/nexus3-persistent-template.yaml \
+  --param=NEXUS_VERSION=3.13.0 \
+  --param=MAX_MEMORY=2Gi

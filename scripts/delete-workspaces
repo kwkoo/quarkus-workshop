@@ -1,0 +1,53 @@
+#!/bin/bash
+
+cd `dirname $0`
+BASE=`pwd`
+cd - >> /dev/null
+
+source ${BASE}/../config.sh
+
+# Ensure that we have jq installed
+which jq >/dev/null 2>/dev/null
+if [ "$?" -ne "0" ]; then
+  echo "jq is not installed"
+  exit 1
+fi
+
+KEYCLOAK_URL="https://$(oc get route/keycloak -n $CRW_PROJECT -o jsonpath='{.spec.host}')"
+CHE_URL="https://$(oc get route/codeready -n $CRW_PROJECT -o jsonpath='{.spec.host}')"
+
+
+u=1 \
+&& \
+while [ $u -le $USERCOUNT ]; do
+  USER="user${u}"
+
+  ACCESS_TOKEN=$(curl -k --silent -i -XPOST -H "Content-Type: application/x-www-form-urlencoded" ${KEYCLOAK_URL}/auth/realms/codeready/protocol/openid-connect/token -d 'username='"$USER"'&password='"$PASSWORD"'&grant_type=password&client_id=admin-cli' | grep -o '"access_token":"[^"]*' | sed -e 's/.*"//')
+
+  #echo "access token: $ACCESS_TOKEN"
+
+  WORKSPACES="$(curl -k --silent -H "Accept: application/json" -H "Authorization: Bearer $ACCESS_TOKEN" "${CHE_URL}/api/workspace" | jq -r '.[].id')"
+  if [ -n "$WORKSPACES" ]; then
+    for w in $WORKSPACES; do
+      echo "stopping workspace $w for user ${USER}..."
+      RETURN_CODE=$(curl -k --silent -o /dev/null -w "%{http_code}" -XDELETE -H "Authorization: Bearer $ACCESS_TOKEN" "${CHE_URL}/api/workspace/${w}/runtime")
+      #echo "return code $RETURN_CODE"
+      echo -n "waiting for workspace to stop..."
+      while [ "$(curl -k --silent -H "Accept: application/json" -H "Authorization: Bearer $ACCESS_TOKEN" "${CHE_URL}/api/workspace/$w" | jq -r '.status')" != "STOPPED" ]; do
+        echo -n "."
+        sleep 5
+      done
+      echo "done"
+
+      echo "deleting workspace $w for user ${USER}..."
+      RETURN_CODE=$(curl -k --silent -o /dev/null -w "%{http_code}" -XDELETE -H "Authorization: Bearer $ACCESS_TOKEN" "${CHE_URL}/api/workspace/$w")
+      if [ "$RETURN_CODE" = "204" ]; then
+        echo "successfully deleted workspace"
+      else
+        echo "did not get the a 204 return code - got $RETURN_CODE instead"
+      fi
+    done
+  fi
+
+  u=$(( $u + 1))
+done

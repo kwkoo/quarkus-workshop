@@ -1,0 +1,35 @@
+#!/bin/bash
+
+cd `dirname $0`
+BASE=`pwd`
+cd - >> /dev/null
+
+source ${BASE}/../config.sh
+
+oc create ns $CRW_PROJECT 2>/dev/null
+oc project $CRW_PROJECT
+
+
+cat ${BASE}/../files/crw-operatorgroup.yaml \
+  | \
+  sed "s/#PROJ#/$CRW_PROJECT/g" \
+  | \
+  oc create -n $CRW_PROJECT -f -
+
+oc create -n $CRW_PROJECT -f ${BASE}/../files/crw-sub.yaml
+
+echo -n "waiting for CheCluster API to appear..."
+while [ $(oc api-resources 2>/dev/null | grep checlusters | wc -l) -lt 1 ]; do
+  echo -n "."
+  sleep 5
+done
+echo "done"
+
+oc apply -n $CRW_PROJECT -f ${BASE}/../files/checluster.yaml
+
+echo -n "waiting for keycloak to be ready..."
+while [ "$(oc get -n $CRW_PROJECT deploy/keycloak --no-headers 2>/dev/null | awk '{ print $2 }')" != "1/1" ]; do
+  echo -n "."
+  sleep 5
+done
+echo "done"

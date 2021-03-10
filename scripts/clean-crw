@@ -1,0 +1,29 @@
+#!/bin/bash
+
+cd `dirname $0`
+BASE=`pwd`
+cd - >> /dev/null
+
+source ${BASE}/../config.sh
+
+oc delete -n $CRW_PROJECT checluster/codeready-workspaces 2>/dev/null
+oc delete -n $CRW_PROJECT subscription/codeready-workspaces 2>/dev/null
+oc delete -n $CRW_PROJECT csv/crwoperator.v2.6.0 2>/dev/null
+
+OG_NAME=$(oc get operatorgroup -n $CRW_PROJECT -o name 2>/dev/null)
+if [ -n "$OG_NAME" ]; then
+  oc delete -n $CRW_PROJECT $OG_NAME
+fi
+
+echo -n "waiting for all objects to disappear..."
+while [ $(oc get all -n $CRW_PROJECT --no-headers 2>/dev/null | wc -l) -gt 0 ]; do
+  echo -n "."
+  sleep 5
+done
+echo "done"
+
+oc delete project $CRW_PROJECT 2>/dev/null
+
+oc delete crd/checlusters.org.eclipse.che 2>/dev/null
+
+oc project openshift

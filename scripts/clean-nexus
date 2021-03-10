@@ -1,0 +1,23 @@
+#!/bin/bash
+
+cd `dirname $0`
+BASE=`pwd`
+cd - >> /dev/null
+
+source ${BASE}/../config.sh
+
+oc delete all -n ${INFRA_PROJECT} -l app=nexus
+
+echo -n "waiting for nexus pod to terminate..."
+while [ $(oc get -n ${INFRA_PROJECT} po -l deploymentconfig=nexus -o name 2>/dev/null | wc -l) -gt 0 ]; do
+  echo -n "."
+  sleep 5
+done
+echo "done"
+
+oc delete -n ${INFRA_PROJECT} pvc/nexus-pv
+
+if [ $(oc get all -n $INFRA_PROJECT --no-headers 2>/dev/null | wc -l) -eq 0 ]; then
+  oc delete project $INFRA_PROJECT
+  oc project openshift
+fi

@@ -1,0 +1,23 @@
+#!/bin/bash
+
+cd `dirname $0`
+BASE=`pwd`
+cd - >> /dev/null
+
+source ${BASE}/../config.sh
+
+oc delete all -n $GIT_PROJECT -l app=$GIT_APP_NAME
+
+echo -n "waiting for gitea pod to terminate..."
+while [ $(oc get -n $GIT_PROJECT po -l deployment=$GIT_APP_NAME -o name 2>/dev/null | wc -l) -gt 0 ]; do
+  echo -n "."
+  sleep 5
+done
+echo "done"
+
+oc delete -n $GIT_PROJECT pvc/$GIT_APP_NAME
+
+if [ $(oc get all -n $GIT_PROJECT --no-headers 2>/dev/null | wc -l) -eq 0 ]; then
+  oc delete project $GIT_PROJECT
+  oc project openshift
+fi

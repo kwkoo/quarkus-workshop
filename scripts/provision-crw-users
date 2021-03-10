@@ -1,0 +1,90 @@
+#!/bin/bash
+
+# This script creates a user in CodeReady Workspace's Keycloak. It will then
+# create a workspace for this user.
+
+# Note: When provisioning the CRW custom resource, set
+# .spec.auth.openShiftoAuth to false
+
+cd `dirname $0`
+BASE=`pwd`
+cd - >> /dev/null
+
+source ${BASE}/../config.sh
+
+# Ensure that keycloak is ready
+echo -n "ensuring that keycloak is ready..."
+while [ "$(oc get po -n $CRW_PROJECT -l app=codeready,component=keycloak --no-headers 2>/dev/null | awk '{ print $2}')" != "1/1" ]; do
+  echo -n "."
+  sleep 5
+done
+echo "done"
+
+# Ensure that codeready is ready
+echo -n "ensuring that codeready is ready..."
+while [ "$(oc get po -n $CRW_PROJECT -l app=codeready,component=codeready --no-headers 2>/dev/null | awk '{ print $2}')" != "1/1" ]; do
+  echo -n "."
+  sleep 5
+done
+echo "done"
+
+KEYCLOAK_URL="https://$(oc get route/keycloak -n $CRW_PROJECT -o jsonpath='{.spec.host}')"
+CHE_URL="https://$(oc get route/codeready -n $CRW_PROJECT -o jsonpath='{.spec.host}')"
+
+
+# admin password is from secret/che-identity-secret
+ADMIN_PASSWORD=$(oc get secret/che-identity-secret -n $CRW_PROJECT -o yaml | grep -v 'f:' | grep 'password:' | awk '{ print $2 }' | base64 -d)
+
+# Get access token for admin user
+ACCESS_TOKEN=$(curl -k --silent -i -XPOST -H "Content-Type: application/x-www-form-urlencoded" ${KEYCLOAK_URL}/auth/realms/master/protocol/openid-connect/token -d 'username=admin&password='"$ADMIN_PASSWORD"'&grant_type=password&client_id=admin-cli' | grep -o '"access_token":"[^"]*' | sed -e 's/.*"//')
+
+if [ -z "$ACCESS_TOKEN" ]; then
+  echo "could not get admin access token"
+  exit 1
+fi
+
+#echo "admin access token: $ACCESS_TOKEN"
+
+echo "creating users in keycloak..."
+u=1 \
+&& \
+while [ $u -le $USERCOUNT ]; do
+  USER="user${u}"
+  echo "creating ${USER} in keycloak..."
+
+  # Add user to Che
+  RETURN_CODE=$(curl -k --silent -o /dev/null -w "%{http_code}" -XPOST -H "Content-Type: application/json" -H "Authorization: Bearer $ACCESS_TOKEN" ${KEYCLOAK_URL}/auth/admin/realms/codeready/users -d '{"username":"'"$USER"'","enabled":"true","emailVerified":"true","firstName":"'"$USER"'","lastName":"Developer","email":"'"$USER"'@no-reply.com","credentials":[{"type":"password","value":"'"$PASSWORD"'","temporary":"false"}]}')
+
+  # 201 means that the user was created successfully, 409 means the user already exists
+  if [ "$RETURN_CODE" -ne "201" -a "$RETURN_CODE" -ne "409" ]; then
+    echo "could not create user $USER - return code was $RETURN_CODE"
+  else
+    echo "successfully created ${USER} in keycloak"
+  fi
+
+  u=$(( $u + 1))
+done
+
+echo "creating user workspaces..."
+u=1 \
+&& \
+while [ $u -le $USERCOUNT ]; do
+  USER="user${u}"
+  echo "creating workspace for ${USER}..."
+
+  # Get access token for user
+  ACCESS_TOKEN=$(curl -k --silent -i -XPOST -H "Content-Type: application/x-www-form-urlencoded" ${KEYCLOAK_URL}/auth/realms/codeready/protocol/openid-connect/token -d 'username='"$USER"'&password='"$PASSWORD"'&grant_type=password&client_id=admin-cli' | grep -o '"access_token":"[^"]*' | sed -e 's/.*"//')
+
+  if [ -z "$ACCESS_TOKEN" ]; then
+    echo "could not get $USER access token"
+  else
+    RETURN_CODE=$(curl -k --silent -o /dev/null -w "%{http_code}" -XPOST -H "Content-Type: application/json" -H "Authorization: Bearer $ACCESS_TOKEN" "${CHE_URL}/api/workspace/devfile?start-after-create=true&infrastructure-namespace=${USER}-codeready&namespace=${USER}" -d "@${BASE}/../files/devfile.json")
+    if [ "$RETURN_CODE" -eq "201" ]; then
+      echo "successfully created workspace for ${USER}"
+    else
+      echo "could not create workspace for ${USER} - return code was ${RETURN_CODE}"
+    fi
+  fi
+
+  u=$(( $u + 1))
+done

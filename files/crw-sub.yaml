@@ -1,0 +1,13 @@
+apiVersion: operators.coreos.com/v1alpha1
+kind: Subscription
+metadata:
+  labels:
+    operators.coreos.com/codeready-workspaces.openshift-workspaces: ""
+  name: codeready-workspaces
+spec:
+  channel: latest
+  installPlanApproval: Automatic
+  name: codeready-workspaces
+  source: redhat-operators
+  sourceNamespace: openshift-marketplace
+  startingCSV: crwoperator.v2.6.0

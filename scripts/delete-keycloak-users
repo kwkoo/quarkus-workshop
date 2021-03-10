@@ -1,0 +1,48 @@
+#!/bin/bash
+
+cd `dirname $0`
+BASE=`pwd`
+cd - >> /dev/null
+
+source ${BASE}/../config.sh
+
+# Ensure that we have jq installed
+which jq >/dev/null 2>/dev/null
+if [ "$?" -ne "0" ]; then
+  echo "jq is not installed"
+  exit 1
+fi
+
+KEYCLOAK_URL="https://$(oc get route/keycloak -n $CRW_PROJECT -o jsonpath='{.spec.host}')"
+
+# admin password is from secret/che-identity-secret
+ADMIN_PASSWORD=$(oc get secret/che-identity-secret -n $CRW_PROJECT -o yaml | grep -v 'f:' | grep 'password:' | awk '{ print $2 }' | base64 -d)
+
+# Get access token for admin user
+ACCESS_TOKEN=$(curl -k --silent -i -XPOST -H "Content-Type: application/x-www-form-urlencoded" ${KEYCLOAK_URL}/auth/realms/master/protocol/openid-connect/token -d 'username=admin&password='"$ADMIN_PASSWORD"'&grant_type=password&client_id=admin-cli' | grep -o '"access_token":"[^"]*' | sed -e 's/.*"//')
+
+if [ -z "$ACCESS_TOKEN" ]; then
+  echo "could not get admin access token"
+  exit 1
+fi
+
+USERS=$(curl -k --silent -H "Accept: application/json" -H "Authorization: Bearer $ACCESS_TOKEN" ${KEYCLOAK_URL}/auth/admin/realms/codeready/users | jq -r '.[] | "\(.id),\(.username)"')
+if [ -z "$USERS" ]; then
+  echo "could not get keycloak users"
+  exit 1
+fi
+
+for line in $USERS; do
+  ID="$(echo -n $line | awk -F ',' '{ print $1 }')"
+  USER="$(echo -n $line | awk -F ',' '{ print $2 }')"
+  if [ "$USER" = "admin" ]; then
+    continue
+  fi
+  echo "deleting user ${USER}..."
+  RETURN_CODE=$(curl -k --silent -o /dev/null -w "%{http_code}" -XDELETE -H "Authorization: Bearer $ACCESS_TOKEN" ${KEYCLOAK_URL}/auth/admin/realms/codeready/users/${ID})
+  if [ "$RETURN_CODE" = "204" ]; then
+    echo "success"
+  else
+    echo "did not get a 204 return code - got $RETURN_CODE"
+  fi
+done

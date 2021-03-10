@@ -1,0 +1,63 @@
+apiVersion: org.eclipse.che/v1
+kind: CheCluster
+metadata:
+  name: codeready-workspaces
+spec:
+  auth:
+    identityProviderURL: ''
+    identityProviderRealm: ''
+    oAuthSecret: ''
+    identityProviderPassword: ''
+    identityProviderImage: ''
+    oAuthClientName: ''
+    identityProviderClientId: ''
+    identityProviderAdminUserName: ''
+    externalIdentityProvider: false
+    openShiftoAuth: false
+  database:
+    postgresImage: ''
+    chePostgresUser: ''
+    externalDb: false
+    chePostgresHostName: ''
+    chePostgresPassword: ''
+    chePostgresDb: ''
+    chePostgresPort: ''
+  metrics:
+    enable: true
+  server:
+    # More custom properties at: https://www.eclipse.org/che/docs/che-7/installation-guide/advanced-configuration-options-for-the-che-server-component/
+    customCheProperties:
+      CHE_LIMITS_WORKSPACE_IDLE_TIMEOUT: "0"
+      CHE_WORKSPACE_DEFAULT__MEMORY__LIMIT__MB: "2048"
+      #CHE_WORKSPACE_DEFAULT__MEMORY__REQUEST__MB:
+    proxyURL: ''
+    cheClusterRoles: ''
+    singleHostGatewayConfigMapLabels: {}
+    singleHostGatewayImage: ''
+    proxyPassword: ''
+    nonProxyHosts: ''
+    pluginRegistryImage: ''
+    serverMemoryRequest: ''
+    devfileRegistryImage: ''
+    proxyPort: ''
+    singleHostGatewayConfigSidecarImage: ''
+    tlsSupport: true
+    serverMemoryLimit: ''
+    allowUserDefinedWorkspaceNamespaces: true
+    serverTrustStoreConfigMapName: ''
+    proxyUser: ''
+    cheImage: ''
+    cheWorkspaceClusterRole: ''
+    workspaceNamespaceDefault: ''
+    serverExposureStrategy: ''
+    gitSelfSignedCert: false
+    useInternalClusterSVCNames: true
+    cheFlavor: codeready
+    cheImageTag: ''
+  storage:
+    postgresPVCStorageClassName: ''
+    preCreateSubPaths: true
+    pvcClaimSize: 1Gi
+    pvcJobsImage: ''
+    pvcStrategy: common
+    workspacePVCStorageClassName: ''

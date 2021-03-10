@@ -1,0 +1,47 @@
+#!/bin/bash
+
+# This script
+# * creates a new project for each user
+# * assigns the user as admin for that project
+# * creates a secret for maven settings.xml
+
+cd $(dirname $0)
+BASE=$(pwd)
+cd - >> /dev/null
+
+source ${BASE}/../config.sh
+
+cat ${BASE}/../files/settings.xml \
+| \
+sed "s/#PROJ#/$INFRA_PROJECT/g" \
+> /tmp/settings.xml
+
+u=1 \
+&& \
+while [ $u -le $USERCOUNT ]; do
+  USER="user${u}"
+  echo "creating project for ${USER}..."
+
+  PROJ="${USER}-codeready"
+  oc new-project $PROJ
+  oc adm policy add-role-to-user admin $USER -n $PROJ
+  oc adm policy add-role-to-user admin system:serviceaccount:${CRW_PROJECT}:che -n $PROJ
+  oc create secret generic maven-settings \
+    -n $PROJ \
+    --from-file=/tmp/settings.xml
+  oc label secret/maven-settings \
+    -n $PROJ \
+    --overwrite \
+    app.kubernetes.io/part-of=che.eclipse.org \
+    app.kubernetes.io/component=workspace-secret
+  oc annotate secret/maven-settings \
+    -n $PROJ \
+    --overwrite \
+    che.eclipse.org/automount-workspace-secret=true \
+    che.eclipse.org/mount-path=/home/jboss/.m2 \
+    che.eclipse.org/mount-as=file
+
+  u=$(( $u + 1))
+done
+
+rm -f /tmp/settings.xml

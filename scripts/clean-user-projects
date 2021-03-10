@@ -1,0 +1,19 @@
+#!/bin/bash
+
+cd $(dirname $0)
+BASE=$(pwd)
+cd - >> /dev/null
+
+source ${BASE}/../config.sh
+
+u=1 \
+&& \
+while [ $u -le $USERCOUNT ]; do
+  USER="user${u}"
+  echo "deleting project for ${USER}..."
+
+  PROJ="${USER}-codeready"
+  oc delete project $PROJ 2>/dev/null
+
+  u=$(( $u + 1))
+done

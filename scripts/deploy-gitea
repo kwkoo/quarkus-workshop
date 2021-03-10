@@ -1,0 +1,87 @@
+#!/bin/bash
+
+cd `dirname $0`
+BASE=`pwd`
+cd - >> /dev/null
+
+source ${BASE}/../config.sh
+
+set -e
+
+ROUTING_SUFFIX=$(oc get route -n openshift-console console -o jsonpath='{.spec.host}' | sed -e 's/^[^.]*\.//')
+
+oc new-project $GIT_PROJECT || oc project $GIT_PROJECT
+oc new-app \
+  -n $GIT_PROJECT \
+  -f ${BASE}/../files/gitea-template.yaml \
+  -p APPLICATION_NAME=$GIT_APP_NAME \
+  -p PVC_SIZE=$GIT_PVC_SIZE \
+  -p DOMAIN=${GIT_PROJECT}.${ROUTING_SUFFIX} \
+  -p ROOT_URL=http://${GIT_APP_NAME}-${GIT_PROJECT}.${ROUTING_SUFFIX}
+
+echo "waiting for gitea to come up..."
+oc wait \
+  -n $GIT_PROJECT \
+  --timeout=120s \
+  --for=condition=available \
+  deploy/$GIT_APP_NAME
+
+# Pause for web UI to come up
+sleep 30
+
+
+echo "creating gitea admin account..."
+oc rsh \
+  -n $GIT_PROJECT \
+  deploy/$GIT_APP_NAME \
+  gitea admin create-user --admin --username "$GIT_ADMIN_USER" --password "$GIT_ADMIN_PASSWORD" --email "${GIT_ADMIN_USER}@no-reply.com"
+
+
+set +e
+
+u=1 \
+&& \
+while [ $u -le $USERCOUNT ]; do
+  USER="user${u}"
+
+  oc rsh \
+    -n $GIT_PROJECT \
+    deploy/$GIT_APP_NAME \
+    gitea admin create-user --username "$USER" --password "$PASSWORD" --email "${USER}@no-reply.com"
+
+  u=$(( $u + 1))
+done
+
+
+
+#ROUTE_HOST="$(oc get route/$APP_NAME -o jsonpath='{.spec.host}')"
+
+#function clone_repo {
+#  local repoName="$1"
+#  local repoDescription="$2"
+#
+#  echo "repoName $repoName"
+#  echo "repoDescription $repoDescription"
+#
+#  curl \
+#    -X POST \
+#    -H "accept: application/json" \
+#    -H "Content-Type: application/json" \
+#    -H "Authorization: token $TOKEN" \
+#    -d '{"auto_init":false, "default_branch":"master", "description":"'"$repoDescription"'", "gitignores":"", "issue_labels":"", "license":"", "name":"'"$repoName"'", "private":false, "template":false}' \
+#    http://${ROUTE_HOST}/api/v1/user/repos
+#
+#  cd ${BASE}/${repoName}
+#  rm -rf .git
+#  git init
+#  git add .
+#  git commit -m 'Initial commit'
+#  git push --mirror http://${GIT_USER}:${GIT_PASSWORD}@${ROUTE_HOST}/${GIT_USER}/${repoName}.git
+#  rm -rf .git
+#}
+
+#while [ "$#" -gt 1 ]; do
+#  clone_repo "$1" "$2"
+#  shift
+#  shift
+#done
